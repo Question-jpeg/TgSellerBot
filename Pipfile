@@ -10,6 +10,7 @@ django-cors-headers = "*"
 pillow = "*"
 whitenoise = "*"
 pytelegrambotapi = "*"
+django-filter = "*"
 
 [dev-packages]
 

@@ -3,5 +3,6 @@
 /TgBotBackendLukash/settings/prod.py
 /TgBotBackendLukash/asgi.py
 /TgBotBackendLukash/wsgi.py
+/TgBotBackendLukash/settings/dev.py
 manage.py
 db.sqlite3
