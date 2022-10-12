@@ -1,0 +1,7 @@
+*.pyc
+/media/
+/TgBotBackendLukash/settings/prod.py
+/TgBotBackendLukash/asgi.py
+/TgBotBackendLukash/wsgi.py
+manage.py
+db.sqlite3
