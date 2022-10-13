@@ -53,11 +53,28 @@ class Category(models.Model):
         verbose_name = 'Категория'
         verbose_name_plural = 'Категории'
 
-class Size(models.Model):
-    title = models.CharField(max_length=5)
+    def __str__(self) -> str:
+        return self.title
+
 
 class UserInfo(models.Model):
-    user_id = models.CharField(max_length=50)
-    size = models.ForeignKey(to=Size, on_delete=models.CASCADE, related_name='+')
-    category = models.ForeignKey(to=Category, on_delete=models.CASCADE, related_name='+')
+    chat_id = models.CharField(max_length=50)
+    size = models.CharField(max_length=5, null=True, blank=True)
+    category = models.ForeignKey(to=Category, on_delete=models.CASCADE, related_name='+', null=True, blank=True)
     is_admin = models.BooleanField(default=False)
+
+    def __str__(self) -> str:
+        return self.chat_id
+
+class Product(models.Model):
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    category = models.ForeignKey(to=Category, on_delete=models.PROTECT, related_name='products')
+    # photo = models.ImageField(upload_to='products')
+
+    def __str__(self) -> str:
+        return self.title
+
+class ProductSize(models.Model):
+    product = models.ForeignKey(to=Product, on_delete=models.CASCADE, related_name='sizes')
+    size = models.CharField(max_length=5)
