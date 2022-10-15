@@ -17,3 +17,7 @@ class ProductAdmin(admin.ModelAdmin):
 class UserInfoAdmin(admin.ModelAdmin):
     pass
 
+@admin.register(models.Config)
+class ConfigAdmin(admin.ModelAdmin):
+    pass
+

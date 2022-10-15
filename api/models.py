@@ -62,15 +62,18 @@ class UserInfo(models.Model):
     size = models.CharField(max_length=5, null=True, blank=True)
     category = models.ForeignKey(to=Category, on_delete=models.CASCADE, related_name='+', null=True, blank=True)
     is_admin = models.BooleanField(default=False)
+    is_admin_interface = models.BooleanField(default=False)
+    is_waiting = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return self.chat_id
 
 class Product(models.Model):
     title = models.CharField(max_length=255)
-    description = models.TextField()
+    description = models.TextField(null=True, blank=True)
     category = models.ForeignKey(to=Category, on_delete=models.PROTECT, related_name='products')
-    # photo = models.ImageField(upload_to='products')
+    price = models.IntegerField()
+    photo = models.ImageField(upload_to='products')
 
     def __str__(self) -> str:
         return self.title
@@ -78,3 +81,10 @@ class Product(models.Model):
 class ProductSize(models.Model):
     product = models.ForeignKey(to=Product, on_delete=models.CASCADE, related_name='sizes')
     size = models.CharField(max_length=5)
+
+class Config(models.Model):
+    key = models.CharField(max_length=255)
+    value = models.TextField()
+
+    def __str__(self) -> str:
+        return self.key
