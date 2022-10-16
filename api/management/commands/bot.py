@@ -436,6 +436,11 @@ def get_okn(message):
     obj, is_created = UserInfo.objects.get_or_create(chat_id=chat_id, defaults={'chat_id': chat_id})
     bot.send_message(chat_id, greetings, reply_markup=get_menu_markup(obj), parse_mode='html')
 
+@bot.message_handler(commands=['chat'])
+def send_chat_id(message: types.Message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, f'{chat_id}')
+
 @bot.message_handler(commands=['menu'])
 def send_menu(message):
     chat_id = message.chat.id
