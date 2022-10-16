@@ -58,15 +58,15 @@ class Category(models.Model):
 
 
 class UserInfo(models.Model):
-    chat_id = models.CharField(max_length=50)
+    chat_id = models.IntegerField()
     size = models.CharField(max_length=5, null=True, blank=True)
-    category = models.ForeignKey(to=Category, on_delete=models.CASCADE, related_name='+', null=True, blank=True)
+    category = models.ForeignKey(to=Category, on_delete=models.SET_NULL, related_name='+', null=True, blank=True)
     is_admin = models.BooleanField(default=False)
+    waiting_id = models.IntegerField(null=True, blank=True)
     is_admin_interface = models.BooleanField(default=False)
-    is_waiting = models.BooleanField(default=False)
 
     def __str__(self) -> str:
-        return self.chat_id
+        return str(self.chat_id)
 
 class Product(models.Model):
     title = models.CharField(max_length=255)
