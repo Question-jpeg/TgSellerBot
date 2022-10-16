@@ -62,7 +62,6 @@ class UserInfo(models.Model):
     size = models.CharField(max_length=5, null=True, blank=True)
     category = models.ForeignKey(to=Category, on_delete=models.SET_NULL, related_name='+', null=True, blank=True)
     is_admin = models.BooleanField(default=False)
-    waiting_id = models.IntegerField(null=True, blank=True)
     is_admin_interface = models.BooleanField(default=False)
 
     def __str__(self) -> str:

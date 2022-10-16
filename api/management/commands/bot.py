@@ -466,13 +466,7 @@ def send_buttons(message):
     markup.add(types.KeyboardButton('/menu'))
     bot.send_message(chat_id, '<b>Нажмите на кнопку /menu для активации меню</b>', parse_mode='html', reply_markup=markup)
 
-def filter_callback_query(call):
-    chat_id = call.message.chat.id
-    msg_id = call.message.id
-    waiting_id = UserInfo.objects.get(chat_id=chat_id).waiting_id
-    return not waiting_id or waiting_id == msg_id
-
-@bot.callback_query_handler(func=filter_callback_query)
+@bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     chat_id = call.message.chat.id
     message_id = call.message.id
