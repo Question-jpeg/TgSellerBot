@@ -990,7 +990,7 @@ def callback_inline(call):
             product.category = cat
             product.save()
 
-            bot.edit_message_caption(get_product_caption(product, obj), chat_id, message_id, parse_mode='html', reply_markup=get_desc_markup(product, obj))
+            bot.delete_message(chat_id, message_id)
 
         elif 'change_sizes' in call.data:
             product_id = int(call.data.split(':')[1])
