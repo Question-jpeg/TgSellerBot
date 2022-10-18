@@ -301,12 +301,12 @@ def get_category_message_obj(obj: UserInfo):
     
     return {'text': text, 'markup': markup}
 
-def get_sizes_message_obj(obj: UserInfo):
+def get_sizes_message_obj(obj: UserInfo, callback_data=None):
     category = obj.category
     markup = types.InlineKeyboardMarkup()
     for size in [l[0] for l in ProductSize.objects.filter(product__category=category).values_list('size').distinct()]:
         markup.add(types.InlineKeyboardButton(size, callback_data=f'set_size:{size}'))
-    markup.add(types.InlineKeyboardButton('Вернуться', callback_data='category'))
+    markup.add(types.InlineKeyboardButton('Вернуться', callback_data=(callback_data if callback_data else 'category')))
     return {'text': '<b>Выберите Размер</b>', 'markup': markup}
 
 
@@ -628,7 +628,7 @@ def callback_inline(call):
         if not obj.category:
             bot.send_message(chat_id, 'Сначала выберите категорию')
         else:
-            msg = get_sizes_message_obj(obj)
+            msg = get_sizes_message_obj(obj, 'return_to_menu')
             bot.edit_message_text(msg['text'], chat_id=chat_id, message_id=message_id, parse_mode='html', reply_markup=msg['markup'])    
     elif 'set_size' in call.data:
         obj.size = call.data.split(':')[1]
