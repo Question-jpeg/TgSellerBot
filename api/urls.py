@@ -2,5 +2,5 @@ from django.urls import path, include
 from .views import tbot
 
 urlpatterns = [
-    path('cbbf15d8-0421-4512-12a6-5e5d977e3aef/', tbot, name='bot')
+    path('e915ea40-a31a-4859-a7ac-b4ecc75bc27b/', tbot, name='bot')
 ]
