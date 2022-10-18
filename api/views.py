@@ -313,14 +313,16 @@ def get_sizes_message_obj(obj: UserInfo, callback_data=None):
 def get_category_product_markup(product: Product):
     product_id = product.pk
     keyboard = []
+    start = []
+    end = []
     for category in Category.objects.exclude(pk=product.category.pk):
-        lst = []
         cat_button = types.InlineKeyboardButton(category.title, callback_data=f'set_product_category:{product_id}  category_id:{category.pk}')
-        lst.append(cat_button)
         if Product.objects.filter(category=category).count() == 0:
             del_button = types.InlineKeyboardButton('❌', callback_data=f'del_category_in_product:{category.pk}  product_id:{product_id}')
-            lst.append(del_button)
-        keyboard.append(lst)
+            end.append([cat_button, del_button])
+        else:
+            start.append([cat_button])
+    keyboard += start + end
     keyboard.append([types.InlineKeyboardButton('Создать категорию', callback_data=f'create_category_in_product:{product_id}')])
     keyboard.append([types.InlineKeyboardButton('Вернуться', callback_data=f'return_admin_to_product:{product_id}  reply:None')])
 
