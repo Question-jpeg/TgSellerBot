@@ -622,7 +622,8 @@ def callback_inline(call):
         if not obj.category:
             bot.send_message(chat_id, 'Сначала выберите категорию')
         else:
-            bot.edit_message_text(get_menu_title(obj), chat_id=chat_id, message_id=message_id, parse_mode='html', reply_markup=get_menu_markup(obj))
+            msg = get_sizes_message_obj(obj)
+            bot.edit_message_text(msg['text'], chat_id=chat_id, message_id=message_id, parse_mode='html', reply_markup=msg['markup'])
     
     elif 'set_size' in call.data:
         obj.size = call.data.split(':')[1]
