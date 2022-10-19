@@ -585,7 +585,8 @@ def get_okn(message):
     greetings = Config.objects.get(key='greetings').value
     chat_id = message.chat.id
     obj, is_created = UserInfo.objects.get_or_create(chat_id=chat_id, defaults={'chat_id': chat_id})
-    bot.send_message(chat_id, greetings, reply_markup=get_menu_markup(obj), parse_mode='html')
+    bot.send_message(chat_id, greetings, parse_mode='html', reply_markup=get_menu_keyboard_markup())
+    bot.send_message(chat_id, get_menu_title(obj), reply_markup=get_menu_markup(obj), parse_mode='html')
 
 @bot.message_handler(commands=['chat'])
 def send_chat_id(message: types.Message):
