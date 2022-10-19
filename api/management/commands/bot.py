@@ -165,8 +165,8 @@ def get_menu_keyboard_markup():
     menu_markup.add(types.KeyboardButton('/menu'))
     return menu_markup
 
-def get_cancel_to_markup(callback_data):
-    return types.InlineKeyboardMarkup(keyboard=[[types.InlineKeyboardButton('Отмена', callback_data=callback_data)]])
+def get_cancel_to_markup(callback_data, title='Отмена'):
+    return types.InlineKeyboardMarkup(keyboard=[[types.InlineKeyboardButton(title, callback_data=callback_data)]])
 
 def verify_course(message: types.Message, call_message: types.Message, obj_id):
     call_id = call_message.id
@@ -244,7 +244,7 @@ def verify_category_in_options(message: types.Message, call_message: types.Messa
 
 def get_category_options_message(category_id):
     category = Category.objects.get(pk=category_id)
-    cancel_keyboard = [] + get_cancel_to_markup('category').keyboard
+    cancel_keyboard = [] + get_cancel_to_markup('category', 'Вернуться').keyboard
     lst = []
     lst.append([types.InlineKeyboardButton(category.title, callback_data=f'edit_opt_category_title:{category_id}')])
     lst.append([types.InlineKeyboardButton('С размерами ✅' if category.is_size else 'Без размеров ❌', callback_data=f'change_opt_category_is_size:{category_id}')])
@@ -458,7 +458,7 @@ def get_create_mode_message_obj(pk):
     keyboard.append([types.InlineKeyboardButton('Описание ❌' if product_cache.description is None else 'Описание ✅', callback_data=f'create_mode_desc:{product_cache.pk}')])             
     if is_valid(product_cache):
         keyboard.append([types.InlineKeyboardButton('Создать товар ✅', callback_data=f'create_from_cache_product:{pk}')])
-    keyboard += get_cancel_to_markup('category').keyboard
+    keyboard += get_cancel_to_markup('category', 'Вернуться').keyboard
     
     markup = types.InlineKeyboardMarkup(keyboard=keyboard)
     return {'text': f'Режим создания товара в категории\n\n<b>{category.title}</b>', 'markup': markup}
@@ -473,7 +473,7 @@ def verify_create_mode_product_title(message: types.Message, call_message: types
 
 def get_create_mode_sizes_message_obj(pk):
     product_cache = ProductCreationCache.objects.get(pk=pk)
-    cancel_keyboard = get_cancel_to_markup(f'create_product:{product_cache.category.pk}').keyboard
+    cancel_keyboard = get_cancel_to_markup(f'create_product:{product_cache.category.pk}', 'Вернуться').keyboard
     lst = []
     for product_size_cached in ProductSizeCached.objects.filter(product_cache_id=pk):
         lst.append([types.InlineKeyboardButton(f'{product_size_cached.size} ❌', callback_data=f'create_mode_rem_size:{product_size_cached.pk}')])
@@ -607,7 +607,6 @@ def callback_inline(call):
     obj, is_created = UserInfo.objects.get_or_create(chat_id=chat_id, defaults={'chat_id': chat_id})
     bot.clear_step_handler_by_chat_id(chat_id)
     if call.data == 'category':
-        bot.clear_step_handler(call.message)
         msg = get_category_message_obj(obj)
         bot.edit_message_text(msg['text'], chat_id=chat_id, message_id=message_id, reply_markup=msg['markup'], parse_mode='html')
     elif 'set_category' in call.data:
@@ -645,7 +644,8 @@ def callback_inline(call):
 
     elif call.data == 'manager':
         manager = Config.objects.get(key='manager')
-        bot.send_message(chat_id, manager.value)
+        markup = get_cancel_to_markup('return_to_menu', 'Ок')
+        bot.edit_message_text(manager.value, chat_id, message_id, reply_markup=markup)
 
     elif 'list_desc' in call.data:
         product_pk = int(call.data.split(':')[1])
@@ -658,7 +658,6 @@ def callback_inline(call):
     elif 'return_to_product' in call.data:
         product_id = int(call.data.split(':')[1])
         product = Product.objects.get(pk=product_id)
-        bot.clear_step_handler(call.message)
         bot.edit_message_caption(get_product_caption(product, obj), chat_id, message_id, parse_mode='html', reply_markup=get_desc_markup(product, obj))
 
 
@@ -676,7 +675,6 @@ def callback_inline(call):
         send_products(chat_id, obj, index, query, (not obj.is_admin_interface and obj.category.is_size))        
 
     elif call.data == 'return_to_menu':
-        bot.clear_step_handler(call.message)
         bot.edit_message_text(get_menu_title(obj), chat_id, message_id, parse_mode='html', reply_markup=get_menu_markup(obj))
 
 #### ADMIN
@@ -807,7 +805,6 @@ def callback_inline(call):
             product = Product.objects.get(pk=product_id)
             bot.edit_message_caption(get_product_caption(product, obj), chat_id, message_id, parse_mode='html', reply_markup=get_desc_markup(product, obj))
             
-            bot.clear_step_handler(call.message)
             if replied_message_id != 'None':
                 bot.delete_message(chat_id, int(replied_message_id))
 
@@ -816,7 +813,6 @@ def callback_inline(call):
             product_id = int(info[0].split(':')[1])
             replied_message_id = info[1].split(':')[1]
             
-            bot.clear_step_handler(call.message)
             bot.edit_message_caption('Выберите категорию', chat_id, message_id, reply_markup=get_category_product_markup(Product.objects.get(pk=product_id)))
             bot.delete_message(chat_id, replied_message_id)
 
@@ -998,7 +994,6 @@ def callback_inline(call):
             info = call.data.split('  ')
             product_id = int(info[0].split(':')[1])
             replied_message_id = int(info[1].split(':')[1])
-            bot.clear_step_handler(call.message)
             bot.delete_message(chat_id, replied_message_id)
             bot.edit_message_caption('<b>Размеры</b>', chat_id, message_id, parse_mode='html', reply_markup=get_sizes_markup(product_id))
 
