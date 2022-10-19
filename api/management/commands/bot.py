@@ -117,7 +117,8 @@ def get_desc_markup(product: Product, obj: UserInfo):
         first_row.append(types.InlineKeyboardButton('Заголовок', callback_data=f'change_title:{product.pk}'))
         first_row.append(types.InlineKeyboardButton('Категория', callback_data=f'change_category:{product.pk}'))
         second_row = []
-        second_row.append(types.InlineKeyboardButton('Размеры', callback_data=f'change_sizes:{product.pk}'))
+        if product.category.is_size:
+            second_row.append(types.InlineKeyboardButton('Размеры', callback_data=f'change_sizes:{product.pk}'))
         second_row.append(types.InlineKeyboardButton('Цена', callback_data=f'change_price:{product.pk}'))
         third_row = []
         third_row.append(types.InlineKeyboardButton('Фото', callback_data=f'change_photo:{product.pk}'))
@@ -136,23 +137,39 @@ def get_desc_markup(product: Product, obj: UserInfo):
 
 def get_product_caption(product: Product, obj: UserInfo):
     available_sizes = [l[0] for l in list(ProductSize.objects.filter(product=product).values_list('size'))]
-    if obj.is_admin_interface:
-        string = f"""
-        <b>{product.title}</b>
-        
-    Размеры <b>{', '.join(available_sizes)}</b>
-    Категория <b>{product.category.title}</b>
+    if obj.category.is_size:
+        if obj.is_admin_interface:
+            string = f"""
+            <b>{product.title}</b>
+            
+        Размеры <b>{', '.join(available_sizes)}</b>
+        Категория <b>{product.category.title}</b>
 
-    Цена <b>{int(product.price)} ₽</b>
-        """
+        Цена <b>{int(product.price)} ₽</b>
+            """
+        else:
+            string = f"""
+            <b>{product.title}</b>
+            
+        Размеры <b>{', '.join(available_sizes)}</b>
+
+        Цена <b>{int(product.price)} ₽</b>
+            """
     else:
-        string = f"""
-        <b>{product.title}</b>
-        
-    Размеры <b>{', '.join(available_sizes)}</b>
+        if obj.is_admin_interface:
+            string = f"""
+            <b>{product.title}</b>
+            
+        Категория <b>{product.category.title}</b>
 
-    Цена <b>{int(product.price)} ₽</b>
-        """
+        Цена <b>{int(product.price)} ₽</b>
+            """
+        else:
+            string = f"""
+            <b>{product.title}</b>
+
+        Цена <b>{int(product.price)} ₽</b>
+            """
     return string
     
 
@@ -381,7 +398,7 @@ def verify_product_category(message: types.Message, call_message: types.Message,
 def verify_product_size(message: types.Message, call_message: types.Message, replied_message: types.Message, product_id):
     call_id = call_message.id
     chat_id = message.chat.id
-    text = message.text
+    text = message.text.strip().upper()
     bot.delete_message(chat_id, message.id)
     if len(text) > 5:
         try:
@@ -485,7 +502,7 @@ def get_create_mode_sizes_message_obj(pk):
 def verify_create_mode_product_size(message: types.Message, call_message: types.Message, pk):
     call_id = call_message.id
     chat_id = message.chat.id
-    text = message.text
+    text = message.text.strip().upper()
     bot.delete_message(chat_id, message.id)
     cancel_markup = get_cancel_to_markup(f'create_mode_open_sizes:{pk}')
     if len(text) > 5:
