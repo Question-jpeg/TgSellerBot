@@ -9,9 +9,13 @@ class ProductSizeInline(admin.TabularInline):
     model = models.ProductSize
     extra = 1
 
+class ProductPhotoInline(admin.TabularInline):
+    model = models.ProductPhoto
+    extra = 1
+
 @admin.register(models.Product)
 class ProductAdmin(admin.ModelAdmin):
-    inlines = [ProductSizeInline]
+    inlines = [ProductSizeInline, ProductPhotoInline]
 
 @admin.register(models.UserInfo)
 class UserInfoAdmin(admin.ModelAdmin):
@@ -21,3 +25,11 @@ class UserInfoAdmin(admin.ModelAdmin):
 class ConfigAdmin(admin.ModelAdmin):
     pass
 
+
+class ProductPhotoCacheInline(admin.TabularInline):
+    model = models.ProductPhotoCached
+    extra = 1
+
+@admin.register(models.ProductCreationCache)
+class ProductCreationCacheAdmin(admin.ModelAdmin):
+    inlines = [ProductPhotoCacheInline]

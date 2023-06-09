@@ -28,7 +28,6 @@ class Product(models.Model):
     description = models.TextField(null=True, blank=True)
     category = models.ForeignKey(to=Category, on_delete=models.PROTECT, related_name='products')
     price = models.IntegerField()
-    photo_id = models.CharField(max_length=255)
 
     def __str__(self) -> str:
         return self.title
@@ -36,6 +35,10 @@ class Product(models.Model):
 class ProductSize(models.Model):
     product = models.ForeignKey(to=Product, on_delete=models.CASCADE, related_name='sizes')
     size = models.CharField(max_length=5)
+
+class ProductPhoto(models.Model):
+    product = models.ForeignKey(to=Product, on_delete=models.CASCADE, related_name='photos')
+    photo_id = models.CharField(max_length=255)
 
 class Config(models.Model):
     key = models.CharField(max_length=255)
@@ -50,8 +53,11 @@ class ProductCreationCache(models.Model):
     description = models.TextField(null=True, blank=True)
     category = models.ForeignKey(to=Category, on_delete=models.SET_NULL, null=True, blank=True)
     price = models.IntegerField(null=True, blank=True)
-    photo_id = models.CharField(max_length=255, null=True, blank=True)
 
 class ProductSizeCached(models.Model):
     product_cache = models.ForeignKey(to=ProductCreationCache, on_delete=models.CASCADE)
     size = models.CharField(max_length=5)
+
+class ProductPhotoCached(models.Model):
+    product_cache = models.ForeignKey(to=ProductCreationCache, on_delete=models.CASCADE)
+    photo_id = models.CharField(max_length=255, null=True, blank=True)

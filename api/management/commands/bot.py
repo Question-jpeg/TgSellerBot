@@ -1,7 +1,7 @@
 from uuid import uuid4
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from ...models import Category, Config, Product, ProductCreationCache, ProductSize, ProductSizeCached, UserInfo
+from ...models import Category, Config, Product, ProductCreationCache, ProductPhoto, ProductPhotoCached, ProductSize, ProductSizeCached, UserInfo
 from telebot import TeleBot
 from telebot import types
 import math
@@ -110,8 +110,8 @@ def send_paginator_message(chat_id, current_page_index, count):
 def get_desc_markup(product: Product, obj: UserInfo):
     markup = types.InlineKeyboardMarkup()
     if not obj.is_admin_interface:
-        if product.description:
-            markup.add(types.InlineKeyboardButton('Описание Товара', callback_data=f'list_desc:{product.pk}'))
+        if product.description or (ProductPhoto.objects.filter(product=product).count() > 1):
+            markup.add(types.InlineKeyboardButton('Подробная информация', callback_data=f'open_product_info:{product.pk}'))
     else:
         first_row = []
         first_row.append(types.InlineKeyboardButton('Заголовок', callback_data=f'change_title:{product.pk}'))
@@ -120,12 +120,7 @@ def get_desc_markup(product: Product, obj: UserInfo):
         if product.category.is_size:
             second_row.append(types.InlineKeyboardButton('Размеры', callback_data=f'change_sizes:{product.pk}'))
         second_row.append(types.InlineKeyboardButton('Цена', callback_data=f'change_price:{product.pk}'))
-        third_row = []
-        third_row.append(types.InlineKeyboardButton('Фото', callback_data=f'change_photo:{product.pk}'))
-        if product.description:
-            third_row.append(types.InlineKeyboardButton('Описание', callback_data=f'change_desc:{product.pk}'))
-        else:
-            third_row.append(types.InlineKeyboardButton('Описания нет', callback_data=f'change_desc:{product.pk}'))
+        third_row = [types.InlineKeyboardButton('Подробная информация', callback_data=f'open_product_info:{product.pk}')]
         keyboard = []
         keyboard.append(first_row)
         keyboard.append(second_row)
@@ -141,35 +136,27 @@ def get_product_caption(product: Product, obj: UserInfo):
         if obj.is_admin_interface:
             string = f"""
             <b>{product.title}</b>
-            
         Размеры <b>{', '.join(available_sizes)}</b>
         Категория <b>{product.category.title}</b>
 
-        Цена <b>{int(product.price)} ₽</b>
-            """
+        Цена <b>{int(product.price)} ₽</b>"""
         else:
             string = f"""
             <b>{product.title}</b>
-            
         Размеры <b>{', '.join(available_sizes)}</b>
 
-        Цена <b>{int(product.price)} ₽</b>
-            """
+        Цена <b>{int(product.price)} ₽</b>"""
     else:
         if obj.is_admin_interface:
             string = f"""
             <b>{product.title}</b>
-            
         Категория <b>{product.category.title}</b>
 
-        Цена <b>{int(product.price)} ₽</b>
-            """
+        Цена <b>{int(product.price)} ₽</b>"""
         else:
             string = f"""
             <b>{product.title}</b>
-
-        Цена <b>{int(product.price)} ₽</b>
-            """
+        Цена <b>{int(product.price)} ₽</b>"""
     return string
     
 
@@ -342,15 +329,18 @@ def get_category_product_markup(product: Product):
 def get_admins_markup():
     admins = []
     for admin in UserInfo.objects.filter(is_admin=True):
-        username = bot.get_chat(admin.chat_id).username
-        admins.append([types.InlineKeyboardButton(f'{username}', callback_data=f'send_username:@{username}'), types.InlineKeyboardButton('❌', callback_data=f'exclude_admin:{admin.chat_id}')])
+        try:
+            username = bot.get_chat(admin.chat_id).username
+            admins.append([types.InlineKeyboardButton(f'{username}', callback_data=f'send_username:@{username}'), types.InlineKeyboardButton('❌', callback_data=f'exclude_admin:{admin.chat_id}')])
+        except:
+            pass
 
     admins.append([types.InlineKeyboardButton('Добавить', callback_data='add_admin')])
     admins.append([types.InlineKeyboardButton('Вернуться', callback_data='return_to_menu')])
     markup = types.InlineKeyboardMarkup(keyboard=admins)
     return markup
 
-def send_products(chat_id, obj, page_index, query, product_size=True):
+def send_products(chat_id, obj: UserInfo, page_index, query, product_size=True):
     index = page_index
     count = query.count()
     products_on_page = int(Config.objects.get(key='products_on_page').value)
@@ -365,7 +355,17 @@ def send_products(chat_id, obj, page_index, query, product_size=True):
             else:
                 instance = row
             message = bot.send_message(chat_id, 'Загрузка...')
-            bot.send_photo(chat_id, instance.photo_id, get_product_caption(instance, obj), parse_mode='html', reply_markup=get_desc_markup(instance, obj))
+            photo_query = ProductPhoto.objects.filter(product=instance)
+            if obj.is_admin_interface:
+                photo_id = photo_query[0].photo_id
+                bot.send_photo(chat_id, photo_id, get_product_caption(instance, obj), parse_mode='html', reply_markup=get_desc_markup(instance, obj))
+            else:
+                caption = get_product_caption(instance, obj)
+                caption += f"""\n\n<b>Описание</b>
+                {instance.description}""" if instance.description else ''
+                photos = [types.InputMediaPhoto(photo_query[0].photo_id, caption, parse_mode='html')]
+                photos += [types.InputMediaPhoto(photo.photo_id) for photo in photo_query[1:]]
+                bot.send_media_group(chat_id, photos)
             bot.delete_message(chat_id, message.id)
         send_paginator_message(chat_id, page_index, count)
 
@@ -456,10 +456,11 @@ def verify_product_photo(message: types.Message, call_message: types.Message, re
 def is_valid(product_cache: ProductCreationCache):
     category = product_cache.category
     is_exist = ProductSizeCached.objects.filter(product_cache=product_cache).exists()
+    is_photo = ProductPhotoCached.objects.filter(product_cache=product_cache).exists()
     return (product_cache.title is not None) and \
     ((category.is_size and is_exist) or (not category.is_size)) and \
     (product_cache.price is not None) and \
-    (product_cache.photo_id is not None)
+    (is_photo)
 
 def get_create_mode_message_obj(pk):
     product_cache = ProductCreationCache.objects.get(pk=pk)
@@ -471,8 +472,9 @@ def get_create_mode_message_obj(pk):
         keyboard.append([types.InlineKeyboardButton('Размеры ✅' if is_exist else 'Размеры ❌', callback_data=f'create_mode_open_sizes:{product_cache.pk}')])
 
     keyboard.append([types.InlineKeyboardButton('Цена ❌' if product_cache.price is None else f'{product_cache.price} ₽ ✅', callback_data=f'create_mode_price:{product_cache.pk}')])
-    keyboard.append([types.InlineKeyboardButton('Фото ❌' if product_cache.photo_id is None else 'Фото ✅', callback_data=f'create_mode_photo:{product_cache.pk}')])
-    keyboard.append([types.InlineKeyboardButton('Описание ❌' if product_cache.description is None else 'Описание ✅', callback_data=f'create_mode_desc:{product_cache.pk}')])             
+    photos_count = ProductPhotoCached.objects.filter(product_cache=product_cache).count()
+    keyboard.append([types.InlineKeyboardButton('Фото ➕', callback_data=f'create_mode_photo:{product_cache.pk}'), types.InlineKeyboardButton(f'{photos_count} ' + ('✅' if photos_count > 0 else '❌'), callback_data=f'create_mode_list_photo:{product_cache.pk}')])
+    keyboard.append([types.InlineKeyboardButton('Описание ❌' if not product_cache.description else 'Описание ✅', callback_data=f'create_mode_desc:{product_cache.pk}')])             
     if is_valid(product_cache):
         keyboard.append([types.InlineKeyboardButton('Создать товар ✅', callback_data=f'create_from_cache_product:{pk}')])
     keyboard += get_cancel_to_markup('category', 'Вернуться').keyboard
@@ -542,23 +544,85 @@ def verify_create_mode_product_description(message: types.Message, call_message:
     msg = get_create_mode_message_obj(pk)
     bot.edit_message_text(msg['text'], chat_id, call_id, parse_mode='html', reply_markup=msg['markup'])
 
-def verify_create_mode_product_photo(message: types.Message, call_message: types.Message, pk):
+def send_media(chat_id, message_id, pk):
+    product = Product.objects.get(pk=pk)
+    query = ProductPhoto.objects.filter(product=product)
+    first = query[0]
+    photos = [types.InputMediaPhoto(first.photo_id, f"""<b>Описание</b>
+    {product.description}""" if product.description else '', parse_mode='html')]
+    photos += [types.InputMediaPhoto(photo.photo_id) for photo in query[1:]]
+    bot.send_media_group(chat_id, photos, reply_to_message_id=message_id)
+    info_message = get_info_message_obj(product.pk, message_id)
+    bot.send_message(chat_id, info_message['text'], parse_mode='html', reply_to_message_id=message_id, reply_markup=info_message['markup'])
+
+def verify_create_mode_product_photo(message: types.Message, call_message: types.Message, replied_message: types.Message, pk):
     call_id = call_message.id
     chat_id = message.chat.id
     bot.delete_message(chat_id, message.id)
     markup = get_cancel_to_markup(f'create_product:{ProductCreationCache.objects.get(pk=pk).category.pk}')
     if message.content_type == 'photo':
-        file_id = message.photo[-1].file_id
-        ProductCreationCache.objects.filter(pk=pk).update(photo_id=file_id)
-        msg = get_create_mode_message_obj(pk)
-        bot.edit_message_text(msg['text'], chat_id, call_id, parse_mode='html', reply_markup=msg['markup'])
+        ProductPhotoCached.objects.create(product_cache_id=pk, photo_id=message.photo[-1].file_id)
+        try:
+            bot.edit_message_text('<b>Фото добавлено</b>\n\nМожете прислать ещё', chat_id, replied_message.id, inline_message_id=call_id, parse_mode='html', reply_markup=markup)
+        except: 
+            pass
     else:
         try:
             bot.edit_message_text('Некорректный формат файла. Пришлите фото', chat_id, call_id, reply_markup=markup)
         except:
             pass
-        bot.register_next_step_handler(call_message, verify_create_mode_product_photo, call_message, pk)
+    bot.register_next_step_handler(call_message, verify_create_mode_product_photo, call_message, replied_message, pk)
 
+def verify_info_product_photo(message: types.Message, call_message: types.Message, parent_id, pk, media_ids_string):
+    chat_id = message.chat.id
+    call_id = call_message.id
+    bot.delete_message(chat_id, message.id)
+    if message.content_type == 'photo':
+        ProductPhoto.objects.create(product_id=pk, photo_id=message.photo[-1].file_id)
+        media_ids = media_ids_string.split(',')
+        bot.delete_message(chat_id, call_id)
+        for id in media_ids:
+            bot.delete_message(chat_id, id)
+        ids = send_media(chat_id, parent_id, pk)
+        hide_markup = get_cancel_to_markup(f'hide_info:{ids}  pk:{pk}', 'Скрыть')
+        bot.edit_message_reply_markup(chat_id, parent_id, reply_markup=hide_markup)
+        canc_markup = get_cancel_to_markup(f'info_options:{pk}  media_ids:{ids[:-2]}  call_id:{parent_id}', )
+        bot.edit_message_text('Фото добавлено. Можете прислать ещё', chat_id, ids.split(',')[-1], reply_markup=canc_markup)
+        bot.register_next_step_handler(call_message, verify_info_product_photo, call_message, parent_id, pk, ids[:-2])
+    else:
+        canc_markup = get_cancel_to_markup(f'info_options:{pk}  media_ids:{media_ids_string}  call_id:{parent_id}')
+        try:
+            bot.edit_message_text('Некорректный формат файла. Пришлите фото', chat_id, call_id, reply_markup=canc_markup)
+        except:
+            pass
+        bot.register_next_step_handler(call_message, verify_info_product_photo, call_message, parent_id, pk, media_ids_string)
+
+
+
+def get_info_message_obj(pk, call_id):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton('Изменить описание', callback_data=f'change_info_desc:{pk}  call_id:{call_id}'))
+    markup.add(types.InlineKeyboardButton('Добавить фото', callback_data=f'info_add_photo:{pk}  call_id:{call_id}'))
+    markup.add(types.InlineKeyboardButton('Удалить фото', callback_data=f'info_list_del_photo:{pk}  call_id:{call_id}'))
+    return {'text': '<b>Опции</b>', 'markup': markup}
+
+def verify_info_mode_product_description(message: types.Message, call_message: types.Message, parent_id, pk):
+    call_id = call_message.id
+    chat_id = message.chat.id
+    text = message.text
+    bot.delete_message(chat_id, message.id)
+    Product.objects.filter(pk=pk).update(description=text)
+    msg = get_info_message_obj(pk, parent_id)
+    bot.edit_message_text(msg['text'], chat_id, call_id, parse_mode='html', inline_message_id=parent_id, reply_markup=msg['markup'])
+    send_media(chat_id, parent_id, pk)
+
+
+def list_photo(chat_id, query, callback_label):
+    photo_ids = []
+    for instance in query:
+        del_markup = get_cancel_to_markup(f'{callback_label}:{instance.pk}', 'Удалить ❌')
+        photo_ids.append(str(bot.send_photo(chat_id, instance.photo_id, '', reply_markup=del_markup).id))
+    return photo_ids
 
 def get_refresh_markup(product_id, replied_message_id):
     return types.InlineKeyboardMarkup(keyboard=[[types.InlineKeyboardButton('Обновить', callback_data=f'refresh:{product_id}  reply_id:{replied_message_id}')]])
@@ -671,6 +735,7 @@ def callback_inline(call):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton('Ok', callback_data=f'return_to_product:{product_pk}'))
         bot.edit_message_caption(f"""<b>Описание</b>
+
         {product.description}""", chat_id, message_id, parse_mode='html', reply_markup=markup)
 
     elif 'return_to_product' in call.data:
@@ -691,14 +756,105 @@ def callback_inline(call):
                 query = Product.objects.filter(category=obj.category)
         
         send_products(chat_id, obj, index, query, (not obj.is_admin_interface and obj.category.is_size))        
+    
 
     elif call.data == 'return_to_menu':
         bot.edit_message_text(get_menu_title(obj), chat_id, message_id, parse_mode='html', reply_markup=get_menu_markup(obj))
 
 #### ADMIN
 
+
     elif obj.is_admin:
-        if 'create_product' in call.data:
+        if 'open_product_info' in call.data:
+            pk = int(call.data.split(':')[1])
+            ids = send_media(chat_id, message_id, pk)
+            canc_markup = get_cancel_to_markup(f'return_to_product:{pk}', 'Ок')
+            bot.edit_message_caption('<b>Подробная информация выслана</b>', chat_id, message_id, parse_mode='html', reply_markup=canc_markup)
+
+        elif 'info_options' in call.data:
+            info = call.data.split('  ')
+            pk = int(info[0].split(':')[1])
+            media_ids = info[1].split(':')[1].split(',')
+            call_id = info[2].split(':')[1]
+
+            msg = get_info_message_obj(pk, media_ids, call_id)
+            bot.edit_message_text(msg['text'], chat_id, message_id, parse_mode='html', inline_message_id=call_id, reply_markup=msg['markup'])
+        
+        elif 'info_add_photo' in call.data:
+            info = call.data.split('  ')
+            pk = int(info[0].split(':')[1])
+            media_ids_string = info[1].split(':')[1]
+            call_id = info[2].split(':')[1]
+            markup = get_cancel_to_markup(f'info_options:{pk}  ids:{media_ids_string}  call_id:{call_id}', 'Вернуться')
+            bot.edit_message_text('<b>Пришлите фото</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
+            bot.register_next_step_handler(call.message, verify_info_product_photo, call.message, call_id, pk, media_ids_string)
+
+        elif 'info_list_del_photo' in call.data:
+            info = call.data.split('  ')
+            pk = int(info[0].split(':')[1])
+            media_ids_string = info[1].split(':')[1]
+            media_ids = media_ids_string.split(',')
+            call_id = info[2].split(':')[1]
+            ids = []
+            for product_photo in ProductPhoto.objects.filter(product_id=pk):
+                markup = get_cancel_to_markup(f'info_del_photo:{product_photo.pk}', 'Удалить ❌')
+                ids.append(str(bot.send_photo(chat_id, product_photo.photo_id, reply_markup=markup).id))
+            ids.append(str(message_id))
+            photos = ','.join(ids)
+            canc_markup = get_cancel_to_markup(f'return_to_info_from_photos:{photos}  pk:{pk}  parent_id:{call_id}', 'Вернуться')
+            ids.append(str(bot.send_message(chat_id, 'Удаление фотографий', reply_to_message_id=call_id, reply_markup=canc_markup).id))
+            ids += media_ids
+            ids = ','.join(ids)
+            hide_markup = get_cancel_to_markup(f'hide_info:{ids}  pk:{pk}', 'Скрыть')
+            bot.edit_message_reply_markup(chat_id, call_id, reply_markup=hide_markup)
+            bot.edit_message_text('Удаление фотографий', chat_id, message_id, inline_message_id=call_id)
+
+        elif 'return_to_info_from_photos' in call.data:
+            info = call.data.split('  ')
+            photos_ids = info[0].split(':')[1]
+            pk = info[1].split(':')[1]
+            media_ids = info[2].split(':')[1]
+            parent_id = info[3].split(':')[1]
+            for id in photos_ids.split(','):
+                try:
+                    bot.delete_message(chat_id, id)
+                except:
+                    pass
+            ids = media_ids + ',' + str(message_id)
+            hide_markup = get_cancel_to_markup(f'hide_info:{ids}  pk:{pk}', 'Скрыть')
+            bot.edit_message_reply_markup(chat_id, parent_id, reply_markup=hide_markup)
+            msg = get_info_message_obj(pk, media_ids.split(','), parent_id)
+            bot.edit_message_text(msg['text'], chat_id, message_id, inline_message_id=parent_id, reply_markup=msg['markup'])
+
+        # elif 'info_del_photo' in call.data:
+        
+        # elif 'info_perm_del_photo' in call.data:
+
+
+        elif 'change_info_desc' in call.data:
+            info = call.data.split('  ')
+            pk = int(info[0].split(':')[1])
+            call_id = int(info[2].split(':')[1])
+            
+            markup = get_cancel_to_markup(f'info_options:{pk}  ids:{media_ids_string}  call_id:{call_id}')
+            bot.edit_message_text(f'<b>Введите новое описание</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
+            bot.register_next_step_handler(call.message, verify_info_mode_product_description, call.message, call_id, pk)
+
+        elif 'hide_info' in call.data:
+            info = call.data.split('  ')
+            messages_ids = info[0].split(':')[1].split(',')
+            pk = int(info[1].split(':')[1])
+            product = Product.objects.get(pk=pk)
+            for id in messages_ids:
+                try:
+                    bot.delete_message(chat_id, id)
+                except:
+                    pass
+
+            bot.edit_message_caption(get_product_caption(product, obj), chat_id, message_id, parse_mode='html', reply_markup=get_desc_markup(product, obj))
+
+            
+        elif 'create_product' in call.data:
             category_id = int(call.data.split(':')[1])
             product_cache, is_created = ProductCreationCache.objects.get_or_create(user=obj, category_id=category_id, defaults={'user': obj, 'category_id': category_id})
             msg = get_create_mode_message_obj(product_cache.pk)
@@ -758,14 +914,54 @@ def callback_inline(call):
         elif 'create_mode_photo' in call.data:
             pk = int(call.data.split(':')[1])
             product_cache = ProductCreationCache.objects.get(pk=pk)
-            category_id = product_cache.category.pk
-            markup = get_cancel_to_markup(f'create_product:{category_id}')
-            photo_markup = types.InlineKeyboardMarkup(keyboard=[[types.InlineKeyboardButton('Скрыть', callback_data='del_message')]])
-            if product_cache.photo_id is not None:
-                photo_message = bot.send_photo(chat_id, product_cache.photo_id, '<b>Текущее фото</b>', parse_mode='html', reply_markup=photo_markup)                
-            
-            bot.edit_message_text('Пришлите фото', chat_id, message_id, reply_markup=markup)
-            bot.register_next_step_handler(call.message, verify_create_mode_product_photo, call.message, pk)
+            markup = get_cancel_to_markup(f'create_product:{product_cache.category.pk}', 'Вернуться')
+            bot.edit_message_text('<b>Пришлите фото</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
+            bot.register_next_step_handler(call.message, verify_create_mode_product_photo, call.message, call.message, pk)
+
+        elif 'create_with_reply_product' in call.data:
+            info = call.data.split('  ')
+            pk = info[0].split(':')[1]
+            replied_message_id = info[1].split(':')[1]
+            bot.delete_message(chat_id, replied_message_id)
+            msg = get_create_mode_message_obj(pk)
+            bot.edit_message_text(msg['text'], chat_id, message_id, parse_mode='html', reply_markup=msg['markup'])
+
+
+        elif 'create_mode_list_photo' in call.data:
+            pk = int(call.data.split(':')[1])
+            product_cache = ProductCreationCache.objects.get(pk=pk)
+            call_message = bot.edit_message_text('Просмотр фотографий', chat_id, message_id)
+            list_photo(chat_id, ProductPhotoCached.objects.filter(product_cache_id=pk), 'create_mode_del_photo')
+            markup = get_cancel_to_markup(f'create_product:{product_cache.category.pk}', 'Вернуться')
+            replied_message = bot.send_message(chat_id, '<b>Просмотр фотографий</b>', parse_mode='html', reply_markup=markup)
+
+        elif 'create_mode_return_from_photos' in call.data:
+            info = call.data.split('  ')
+            messages_ids = info[0].split(':')[1].split(',')
+            pk = info[1].split(':')[1]
+            for id in messages_ids:
+                try:
+                    bot.delete_message(chat_id, id)
+                except:
+                    pass
+            msg = get_create_mode_message_obj(pk)
+            bot.edit_message_text(msg['text'], chat_id, message_id, parse_mode='html', reply_markup=msg['markup'])
+
+        elif 'create_mode_del_photo' in call.data:
+            pk = call.data.split(':')[1]
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton('Удалить ❌', callback_data=f'create_mode_perm_del_photo:{pk}'))
+            markup.add(types.InlineKeyboardButton('Отмена', callback_data=f'create_mode_canc_del_photo:{pk}'))
+            bot.edit_message_caption('<b>Удалить фото?</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
+
+        elif 'create_mode_canc_del_photo' in call.data:
+            pk = call.data.split(':')[1]
+            del_markup = get_cancel_to_markup(f'create_mode_del_photo:{pk}', 'Удалить ❌')
+            bot.edit_message_caption('', chat_id, message_id, reply_markup=del_markup)
+        elif 'create_mode_perm_del_photo' in call.data:
+            pk = call.data.split(':')[1]
+            ProductPhotoCached.objects.get(pk=pk).delete()
+            bot.delete_message(chat_id, message_id)
 
         elif 'del_message' in call.data:
             bot.delete_message(chat_id, message_id)
@@ -773,14 +969,19 @@ def callback_inline(call):
         elif 'create_from_cache_product' in call.data:
             pk = int(call.data.split(':')[1])
             product_cache = ProductCreationCache.objects.get(pk=pk)
-            product = Product(title=product_cache.title, description=product_cache.description, category=product_cache.category, price=product_cache.price, photo_id=product_cache.photo_id)
-            product.save()
-            to_create = [ProductSize(product=product, size=product_cache_size.size) for product_cache_size in ProductSizeCached.objects.filter(product_cache=product_cache)]
-            ProductSize.objects.bulk_create(to_create)
-            product_cache.delete()
-            markup = types.InlineKeyboardMarkup(keyboard=[[types.InlineKeyboardButton('Вернуться в Категории', callback_data='category')]])
-            bot.edit_message_text('<b>Товар успешно создан!</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
-                
+            if is_valid(product_cache):
+                product = Product(title=product_cache.title, description=product_cache.description, category=product_cache.category, price=product_cache.price)
+                product.save()
+                if product_cache.category.is_size:
+                    to_create = [ProductSize(product=product, size=product_cache_size.size) for product_cache_size in ProductSizeCached.objects.filter(product_cache=product_cache)]
+                    ProductSize.objects.bulk_create(to_create)
+                to_create = [ProductPhoto(product=product, photo_id=product_photo_cache.photo_id) for product_photo_cache in ProductPhotoCached.objects.filter(product_cache=product_cache)]
+                ProductPhoto.objects.bulk_create(to_create)
+                product_cache.delete()
+                markup = types.InlineKeyboardMarkup(keyboard=[[types.InlineKeyboardButton('Вернуться в Категории', callback_data='category')]])
+                bot.edit_message_text('<b>Товар успешно создан!</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
+            else:
+                bot.edit_message_text('<b>Ошибка в заполнении формы</b>', chat_id, message_id, parse_mode='html', reply_markup='return_to_menu')
 
         elif 'refresh' in call.data:
             info = call.data.split('  ')
@@ -996,11 +1197,18 @@ def callback_inline(call):
             info = call.data.split('  ')
             product_id = int(info[0].split(':')[1])
             category_id = int(info[1].split(':')[1])
+            keyboard = get_cancel_to_markup(f'return_to_category_in_product:{product_id}').keyboard
+            markup = types.InlineKeyboardMarkup(keyboard=[[types.InlineKeyboardButton('Подтвердить', callback_data=f'set_perm_product_category:{product_id}  cat_id:{category_id}')]] + keyboard)
+            bot.edit_message_caption(f'<b>Изменить категорию товара на "{Category.objects.get(pk=category_id).title}"?</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
+
+        elif 'set_perm_product_category' in call.data:
+            info = call.data.split('  ')
+            product_id = int(info[0].split(':')[1])
+            category_id = int(info[1].split(':')[1])
             cat = Category.objects.get(pk=category_id)
             product = Product.objects.get(pk=product_id)
             product.category = cat
             product.save()
-
             bot.delete_message(chat_id, message_id)
 
         elif 'change_sizes' in call.data:
@@ -1058,9 +1266,8 @@ def callback_inline(call):
         elif 'change_desc' in call.data:
             product_id = int(call.data.split(':')[1])
             product = Product.objects.get(pk=product_id)
-            replied_message = bot.send_message(chat_id, 'Вы собираетесь изменить описание', reply_to_message_id=message_id)
             markup = get_cancel_product_inline_markup(product_id, replied_message.id)
-            bot.edit_message_caption(f'<b>Текущее описание</b>\n\n{product.description}\n\n<b>Введите новое описание</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
+            bot.edit_message_caption(f'<b>Введите новое описание</b>', chat_id, message_id, parse_mode='html', reply_markup=markup)
             bot.register_next_step_handler(call.message, verify_product_description, call.message, replied_message, product_id)
         
         elif 'delete_product' in call.data:
